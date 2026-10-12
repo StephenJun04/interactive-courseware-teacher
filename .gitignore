@@ -1,0 +1,17 @@
+# Build artifacts and local environments
+work/
+output/
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.DS_Store
+# Credentials
+.env
+.env.*
+# Locally generated sample outputs
+examples/demo_reader.html
+examples/demo_pages.json
+examples/demo_preview.png
+examples/demo_mobile.png

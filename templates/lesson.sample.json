@@ -1,0 +1,36 @@
+{
+  "title": "交互式教材示范：卷积的局部计算",
+  "subtitle": "与原版 PDF 独立对照 · 讲解完整展开",
+  "source_name": "demo.pdf",
+  "scope": {"start_page": 1, "end_page": 3},
+  "lessons": [
+    {
+      "page": 1,
+      "title": "为什么需要局部连接？",
+      "kicker": "从全连接到局部卷积",
+      "blocks": [
+        {"type": "paragraph", "text": "图像中的一小片区域往往包含了边缘、角点这样的**局部信息**。我们可以先让一个小滤波器在图像上移动，而不用每个像素都连接所有神经元。"},
+        {"type": "heading", "text": "核心问题"},
+        {"type": "paragraph", "text": "一个卷积核移动到某个位置时，究竟算出了什么？先用一组具体数字演示，再把规律写成公式。"},
+        {"type": "equation", "latex": "z_{r,c}=\\sum_{i=0}^{F-1}\\sum_{j=0}^{F-1}X_{r+i,c+j}K_{ij}+b", "caption": "单通道、步长 1、无 Padding 的局部加权和"},
+        {"type": "note", "text": "教师补充：深度学习框架中的这一操作通常称为 cross-correlation（核不翻转）。"},
+        {"type": "interactive", "kind": "convolution", "title": "尝试卷积核滑动", "config": {"input": [[1,2,0,1],[0,1,2,0],[1,0,3,2],[2,1,0,1]], "kernel": [[-1,0,1],[-1,0,1],[-1,0,1]], "bias": 0}},
+        {"type": "quiz", "title": "理解检验", "questions": [{"id": "q1", "type": "single_choice", "question": "卷积核移动到下一个位置后，通常哪一部分保持不变？", "options": ["输入窗口的位置", "卷积核的权重", "局部输入像素"], "answer": 1, "hint": "回忆权重共享。", "explanation": "同一滤波器在不同空间位置使用同一组权重。"}]}
+      ]
+    },
+    {
+      "page": 2,
+      "title": "输出为什么会变小？",
+      "blocks": [
+        {"type": "paragraph", "text": "上页看到卷积核只能停在不越界的位置。现在我们问：**这样的合法位置到底有几个？**"},
+        {"type": "equation", "latex": "M=\\left\\lfloor\\frac{N+2P-F}{S}\\right\\rfloor+1", "caption": "这一式子统计单轴上的合法窗口起点数"},
+        {"type": "interactive", "kind": "output_shape", "title": "输出尺寸实验", "config": {"N": 7, "F": 3, "P": 1, "S": 1}},
+        {"type": "quiz", "title": "手算再验证", "questions": [{"id": "q2", "type": "numeric", "question": "N=7, F=3, P=1, S=2 时输出边长 M 是多少？", "answer": 4, "tolerance": 0, "hint": "先计算最大合法起点 N+2P-F。", "explanation": "M=floor((7+2-3)/2)+1=4。"}]}
+      ]
+    },
+    {"page": 3, "title": "把两种知识联系起来", "blocks": [
+      {"type": "paragraph", "text": "我们已经知道输出位置数与参数量不是同一回事：**Stride 会改变计算量，但不会增加一个已有卷积核的权重数量。**"},
+      {"type": "quiz", "title": "综合迁移", "questions": [{"id": "q3", "type": "multi_part", "question": "单通道 7×7 输入，3×3 卷积核，P=1，S=2，只有 1 个输出通道，带 bias。", "parts": [{"label": "输出单轴边长 M", "answer": 4, "tolerance": 0}, {"label": "可训练参数总量", "answer": 10, "tolerance": 0}, {"label": "乘法次数", "answer": 144, "tolerance": 0}], "hint": "先区分输出位置数与卷积核权重数。", "explanation": "输出 4×4，参数 3×3×1+1=10，乘法 4×4×3×3=144。"}]}
+    ]}
+  ]
+}

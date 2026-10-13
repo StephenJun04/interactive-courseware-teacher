@@ -46,20 +46,32 @@ def main():
         course = page.locator('#COURSE_DATA').evaluate('(el) => JSON.parse(el.textContent)')
         slides = page.locator('#SLIDE_DATA').evaluate('(el) => JSON.parse(el.textContent)')
         expect(page.locator('.pdf-sheet')).to_have_count(len(slides))
+        continuous = course.get('reading_mode', 'continuous') != 'paged'
+        if continuous:
+            expect(page.locator('.page-section')).to_have_count(len(course['lessons']))
         # Move PDF independently, then traverse all lessons without changing that position.
         page.locator('#pdf-page').fill(str(len(slides)))
         page.locator('#pdf-page').dispatch_event('change')
         page.wait_for_timeout(1000)
         pdf_pos = page.locator('#pdf-scroll').evaluate('(el) => el.scrollTop')
         for index, lesson in enumerate(course['lessons']):
-            expect(page.locator('#article h1')).to_have_text(lesson['title'])
+            scope = page.locator(f'#lesson-p{lesson["page"]}') if continuous else page.locator('#article')
+            expect(scope.locator('.page-title')).to_have_text(lesson['title'])
+            if continuous:
+                relative = scope.evaluate('(el) => el.getBoundingClientRect().top - document.getElementById("lesson-pane").getBoundingClientRect().top')
+                assert -5 <= relative <= 80, f'Left navigation missed P{lesson["page"]}: {relative}'
+            for block in lesson['blocks']:
+                if block['type'] == 'code':
+                    assert scope.locator('.code-block').inner_text() == block['text']
+                if block['type'] == 'table':
+                    expect(scope.locator('.lesson-table tbody tr')).to_have_count(len(block['rows']))
             assert abs(page.locator('#pdf-scroll').evaluate('(el) => el.scrollTop') - pdf_pos) < 10
             math_blocks = [b for b in lesson['blocks'] if b['type'] == 'equation']
             if math_blocks:
-                expect(page.locator('#article .equation svg')).to_have_count(len(math_blocks))
-            assert page.locator('#article [data-mml-node="merror"]').count() == 0
+                expect(scope.locator('.equation svg')).to_have_count(len(math_blocks))
+            assert scope.locator('[data-mml-node="merror"]').count() == 0
             for lab_index, block in enumerate(b for b in lesson['blocks'] if b['type'] == 'interactive'):
-                lab = page.locator('.action-block').filter(has=page.locator('.lab-result, .lab-matrices')).nth(lab_index)
+                lab = scope.locator('.action-block').filter(has=page.locator('.lab-result, .lab-matrices')).nth(lab_index)
                 if block['kind'] == 'output_shape':
                     sliders = lab.locator('input[type=range]')
                     for k, value in enumerate((7, 3, 1, 2)):
@@ -78,7 +90,7 @@ def main():
                     assert math.isclose(result(), expected + x[0][0])
             questions = [q for b in lesson['blocks'] if b['type'] == 'quiz' for q in b.get('questions', [])]
             for q_index, q in enumerate(questions):
-                box = page.locator('.quiz-item').nth(q_index)
+                box = scope.locator('.quiz-item').nth(q_index)
                 button = box.get_by_role('button', name='检查答案')
                 button.click()
                 expect(box.locator('.feedback')).to_have_text('先完成答案，再检查。')
@@ -98,9 +110,13 @@ def main():
                     expect(box.locator('.feedback')).to_contain_text('逐步解析：')
             if index < len(course['lessons']) - 1:
                 page.locator('#lesson-next').click()
-        page.locator('.note-box').fill('smoke-test note')
+        for _ in range(len(course['lessons']) - 1):
+            page.locator('#lesson-prev').click()
+        page.locator('.lesson-footer button').first.click()
+        expect(page.locator('#pdf-page')).to_have_value(str(course['lessons'][0]['page']))
+        page.locator('.note-box').last.fill('smoke-test note')
         page.reload()
-        expect(page.locator('.note-box')).to_have_value('smoke-test note')
+        expect(page.locator('.note-box').last).to_have_value('smoke-test note')
         if args.screenshots:
             page.screenshot(path=str(args.screenshots / 'desktop.png'))
         for width in (375, 768):

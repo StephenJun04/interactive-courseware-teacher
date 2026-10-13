@@ -1,3 +1,3 @@
 interface:
-  display_name: "互动课件教师"
-  short_description: "把课程课件制作成中文精讲、公式推导与计算实验的离线互动教材"
+  display_name: "AI 课程互动教师"
+  short_description: "面向 NLP、深度学习、LLM 与 Agent：简单页简述，难点精讲的离线互动教材"

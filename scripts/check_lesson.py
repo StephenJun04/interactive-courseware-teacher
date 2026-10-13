@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 try: import fitz
 except ImportError: fitz=None
-ALLOWED={'paragraph','heading','equation','note','example','list','interactive','quiz','figure'}
+ALLOWED={'paragraph','heading','equation','note','example','list','interactive','quiz','figure','code','table'}
 INTERACTIONS={'convolution','output_shape'}
 Q_TYPES={'single_choice','numeric','multi_part'}
 
@@ -13,6 +13,7 @@ def lint(lesson, pdf_pages=None):
     errors=[]; warnings=[]
     def err(m):errors.append(m)
     def warn(m):warnings.append(m)
+    if lesson.get('reading_mode','continuous') not in ('continuous','paged'):err('reading_mode must be continuous or paged')
     lessons=lesson.get('lessons',[])
     if not lessons:err('No lessons supplied')
     seen=set(); last=0; total=0; counts=Counter()
@@ -34,6 +35,11 @@ def lint(lesson, pdf_pages=None):
             if t in ('paragraph','heading','note'):
                 if not b.get('text','').strip():err(f'P{p}: empty text in {t}')
                 else:prose+=1
+            if t=='code' and not isinstance(b.get('text'),str):err(f'P{p}: code text must be a string')
+            if t=='table':
+                cols=b.get('columns',[]);rows=b.get('rows',[])
+                if not isinstance(cols,list) or not cols or not all(isinstance(x,str) for x in cols):err(f'P{p}: invalid table columns')
+                if not isinstance(rows,list) or not all(isinstance(row,list) and len(row)==len(cols) and all(isinstance(x,(str,int,float)) for x in row) for row in rows):err(f'P{p}: invalid table rows')
             if t=='equation' and not b.get('latex','').strip():err(f'P{p}: missing latex')
             if t=='interactive':
                 if b.get('kind') not in INTERACTIONS:err(f'P{p}: unsupported Lab {b.get("kind")}')

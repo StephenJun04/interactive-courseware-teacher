@@ -23,13 +23,15 @@ Node 需在 `PATH` 中；`NODE_PATH` 解决在任务目录安装的包对 skill 
 
 完整可运行示例：[lesson.sample.json](../templates/lesson.sample.json)。所有 JSON 数学字符串按 JSON 规则转义反斜线，例如 `"\\sum_i x_i"` 解析后才是 `\sum_i x_i`。
 
-顶层：`title`（必填）、`subtitle`（可选）、`source_name`（来源标识）、`scope: {start_page, end_page}`、`lessons` 数组。明确设置 scope；校验器才能检查范围内漏页。
+顶层：`title`（必填）、`subtitle`（可选）、`source_name`（来源标识）、`scope: {start_page, end_page}`、`lessons` 数组。`reading_mode` 默认 `continuous`（全篇展开，左右独立）；设置 `paged` 可逐讲切换。明确设置 scope；校验器才能检查范围内漏页。
 
 每讲：`page`、`title`、可选 `kicker`、`blocks`。每个物理页一讲，按页码升序，禁止重复；每讲至少一个解释块。题目 `id` 在同讲内唯一，避免共享错误次数或单选组。
 
 | block `type` | 数据与用途 |
 | --- | --- |
 | `paragraph` | `text`，普通正文，支持 `**强调**`，不接受任意 HTML |
+| `code` | `text`，原样显示代码，自动转义 HTML，容器内横向滚动 |
+| `table` | `columns` 文本数组、`rows` 等长单元格数组，单元格为文本或数字 |
 | `heading` / `note` | `text`；note 用“课件原文／教师补充／待核对”文字明确来源 |
 | `equation` | `latex`、可选 `caption`，静态 SVG |
 | `list` | `items`，字符串数组或含 `text` 的对象数组 |
@@ -52,7 +54,17 @@ Node 需在 `PATH` 中；`NODE_PATH` 解决在任务目录安装的包对 skill 
 - `single_choice`：`options` 为文本数组，`answer` 为从 0 开始的正确选项索引。
 - `numeric`：有限数值 `answer`，非负有限 `tolerance`（默认 0）。
 - `multi_part`：非空 `parts`，每问包含 `label`、有限数值 `answer`、可选 `tolerance`。当前只有数字小问，整题统一对错反馈。
-- 可选 `remedial: {question: "针对误区的追问"}`：第一次答错时追加静态追问，当前讲内答对不会移除。跨讲次或刷新不恢复这个追问，不包含独立判分。
+- 可选 `remedial: {question: "针对误区的追问"}`：第一次答错时追加静态追问，当前讲内答对不会移除。连续模式在页面保留这个追问；逐讲模式切讲或刷新不恢复这个追问，不包含独立判分。
+
+## 重建与计时
+
+首次渲染全部 PDF 页面，后续构建默认复用输出目录内 `.courseware-cache/`。缓存键含 PDF 内容 SHA-256、预览缩放、JPEG 质量和 PyMuPDF 版本，来源或参数变化自动失效；损坏缓存会重新渲染。
+
+- `--cache-dir /path/work/pdf-cache`：把缓存放到当前任务的工作目录，让不同输出复用同一来源。
+- `--no-cache`：完全跳过缓存读写，用于比较或排查问题。
+- `--metrics-json /path/work/build-metrics.json`：保存公式渲染、PDF 处理、总构建耗时及缓存命中状态。计时不包含审阅、撰稿和浏览器 QA，不能用于声称端到端提速。
+
+不要每次创建虚拟环境或安装依赖。先验证当前任务/宿主已有环境，缺什么才补什么；无公式时不要安装 MathJax。浏览器测试优先使用已有 Chrome，只有没有可用浏览器时才下载 Chromium。缓存不进入分享包，也不能代替原始页码或内容核对。
 
 ## 构建与测试边界
 

@@ -2,6 +2,7 @@
 const course=JSON.parse(document.getElementById('COURSE_DATA').textContent);
 const slides=JSON.parse(document.getElementById('SLIDE_DATA').textContent);
 const lessons=course.lessons;
+const continuous=course.reading_mode!=='paged';
 const byId=id=>document.getElementById(id);
 const pagePane=byId('lesson-pane'), viewer=byId('pdf-scroll'),article=byId('article'),pdfPages=byId('pdf-pages');
 const key='ict-v8-'+(course.title||'course').replace(/\s/g,'-').slice(0,48);
@@ -9,20 +10,23 @@ let stored={};try{stored=JSON.parse(localStorage.getItem(key)||'{}')}catch{}
 const state={idx:Math.min(lessons.length-1,Math.max(0,Number(stored.idx)||0)),zoom:Math.max(.55,Math.min(2,Number(stored.zoom)||1)),font:Math.max(15,Math.min(23,Number(stored.font)||18)),pdfCurrent:1,attempts:stored.attempts||{},notes:stored.notes||{},review:stored.review||{},pdfImagesReady:false};
 const save=()=>{try{localStorage.setItem(key,JSON.stringify({idx:state.idx,zoom:state.zoom,font:state.font,attempts:state.attempts,notes:state.notes,review:state.review}))}catch{}};
 function flash(s){const t=byId('toast');t.textContent=s;t.classList.add('show');clearTimeout(flash.timer);flash.timer=setTimeout(()=>t.classList.remove('show'),1700)}
-function setMobileTab(tab){byId('frame').dataset.tab=tab;document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.target===tab))}
+let mobileTab='lesson';const tabPositions={lesson:0,pdf:0};
+function setMobileTab(tab){if(tab!==mobileTab){tabPositions[mobileTab]=(mobileTab==='lesson'?pagePane:viewer).scrollTop;mobileTab=tab;byId('frame').dataset.tab=tab;(tab==='lesson'?pagePane:viewer).scrollTop=tabPositions[tab]} document.querySelectorAll('.mobile-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.target===tab))}
 document.querySelectorAll('.mobile-tabs button').forEach(b=>b.addEventListener('click',()=>setMobileTab(b.dataset.target)));
 function setFont(v){state.font=Math.max(15,Math.min(23,v));document.documentElement.style.setProperty('--size',state.font+'px');save()}
 byId('font-smaller').onclick=()=>setFont(state.font-1);byId('font-larger').onclick=()=>setFont(state.font+1);setFont(state.font);
 byId('lesson-prev').onclick=()=>lessonTo(state.idx-1);byId('lesson-next').onclick=()=>lessonTo(state.idx+1);
-function lessonTo(n){if(n<0||n>=lessons.length)return;state.idx=n;save();renderLesson();pagePane.scrollTop=0}
+function lessonTo(n){if(n<0||n>=lessons.length)return;state.idx=n;save();if(continuous){updateNavigation();const target=byId('lesson-p'+lessons[n].page);pagePane.scrollTop=target.offsetTop-article.offsetTop}else{renderLesson();pagePane.scrollTop=0}}
 function make(tag,cls,txt){let e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e}
 function appendHTML(parent,markup){let t=document.createElement('template');t.innerHTML=markup;parent.appendChild(t.content.cloneNode(true))}
-function goPDF(p){const el=document.getElementById('pdfpg-'+p);if(!el)return;if(window.matchMedia('(max-width:800px)').matches)setMobileTab('pdf');el.scrollIntoView({block:'start',behavior:'smooth'});setTimeout(()=>loadNearby(p),60)}
-function renderLesson(){let L=lessons[state.idx];article.replaceChildren();let over=make('div','overline',`PDF P${L.page} · 第 ${state.idx+1} / ${lessons.length} 讲`);article.append(over,make('h1','',L.title));
+function goPDF(p){const el=document.getElementById('pdfpg-'+p);if(!el)return;if(window.matchMedia('(max-width:800px)').matches)setMobileTab('pdf');el.scrollIntoView({block:'start',behavior:'auto'});setTimeout(()=>loadNearby(p),60)}
+function renderLesson(index=state.idx,target=article){const article=target;let L=lessons[index];article.replaceChildren();let over=make('div','overline',`PDF P${L.page} · 第 ${index+1} / ${lessons.length} 讲`);article.append(over,make(continuous?'h2':'h1','page-title',L.title));
 if(L.kicker)article.append(make('p','lead',L.kicker));
 for(let b of L.blocks){let type=b.type;
 if(type==='paragraph'){let p=make('p');p.innerHTML=b.html||'';article.append(p)}
-else if(type==='heading'){article.append(make('h2','',b.text))}
+else if(type==='code'){article.append(make('pre','code-block',b.text))}
+else if(type==='table'){const outer=make('div','table-scroll'),tbl=make('table','lesson-table'),head=make('thead'),row=make('tr');b.columns.forEach(x=>row.append(make('th','',x)));head.append(row);tbl.append(head);const body=make('tbody');b.rows.forEach(values=>{const r=make('tr');values.forEach(x=>r.append(make('td','',x)));body.append(r)});tbl.append(body);outer.append(tbl);article.append(outer)}
+else if(type==='heading'){article.append(make(continuous?'h3':'h2','',b.text))}
 else if(type==='note'){article.append(make('p','teacher-note',b.text))}
 else if(type==='equation'){let d=make('div','equation');d.innerHTML=b.svg||'<pre class="plain-latex">'+escapeHTML(b.latex||'')+'</pre>';if(b.caption)d.append(make('div','eq-caption',b.caption));article.append(d)}
 else if(type==='list'){let ul=make('ul','lesson-list');(b.items||[]).forEach(x=>{let li=make('li');li.innerHTML=x.html||escapeHTML(x.text||x);ul.append(li)});article.append(ul)}
@@ -32,8 +36,10 @@ else if(type==='quiz'){article.append(renderQuiz(b,L.page))}
 else if(type==='figure'){let f=make('figure','figure');const img=new Image();img.src=b.src||'';img.alt=b.caption||'原始课件插图';f.append(img);if(b.caption)f.append(make('figcaption','',b.caption));article.append(f)}
 }
 const note=make('section','notes');let h=make('h2','','我的学习笔记');note.append(h);let t=make('textarea','note-box');t.placeholder='记下哪里还没理解、自己是怎么推导的……';t.value=state.notes[L.page]||'';t.addEventListener('input',()=>{state.notes[L.page]=t.value;save()});note.append(t);let label=make('label');let chk=document.createElement('input');chk.type='checkbox';chk.checked=!!state.review[L.page];chk.addEventListener('change',()=>{state.review[L.page]=chk.checked;save()});label.append(chk,document.createTextNode(' 标记本页：需要复习'));note.append(label);article.append(note);
-let footer=make('div','lesson-footer');let ref=make('button','btn main','对照本页 PDF · P'+L.page);ref.addEventListener('click',()=>goPDF(L.page));let next=make('button','btn','下一讲 →');next.disabled=state.idx===lessons.length-1;next.addEventListener('click',()=>lessonTo(state.idx+1));footer.append(ref,next);article.append(footer);
-byId('lesson-prev').disabled=state.idx===0;byId('lesson-next').disabled=state.idx===lessons.length-1;byId('page-chip').textContent=`讲解 P${L.page} / PDF 可自由翻阅`;
+let footer=make('div','lesson-footer');let ref=make('button','btn main','对照本页 PDF · P'+L.page);ref.addEventListener('click',()=>goPDF(L.page));let next=make('button','btn','下一讲 →');next.disabled=index===lessons.length-1;next.addEventListener('click',()=>lessonTo(index+1));footer.append(ref,next);article.append(footer);
+updateNavigation();
+}
+function updateNavigation(){byId('lesson-prev').disabled=state.idx===0;byId('lesson-next').disabled=state.idx===lessons.length-1;byId('page-chip').textContent=`讲解 P${lessons[state.idx].page} / PDF 可自由翻阅`;
 }
 function escapeHTML(x){return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function renderLab(b){let wrap=make('section','action-block');wrap.append(make('h2','',b.title||'交互实验'));if(b.caption)wrap.append(make('p','caption',b.caption));const inner=make('div');wrap.append(inner);
@@ -55,5 +61,5 @@ byId('pdf-zoom-out').onclick=()=>{state.zoom=Math.max(.6,Math.round((state.zoom-
 function currentPage(){let top=viewer.getBoundingClientRect().top+60;let best=1,dist=1e8;document.querySelectorAll('.pdf-sheet').forEach((e,i)=>{let d=Math.abs(e.getBoundingClientRect().top-top);if(d<dist){best=i+1;dist=d}});return best}
 let raf=null;viewer.addEventListener('scroll',()=>{if(raf)return;raf=requestAnimationFrame(()=>{state.pdfCurrent=currentPage();byId('pdf-page').value=state.pdfCurrent;raf=null})});byId('pdf-prev').onclick=()=>goPDF(Math.max(1,currentPage()-1));byId('pdf-next').onclick=()=>goPDF(Math.min(slides.length,currentPage()+1));byId('pdf-page').addEventListener('change',e=>{let p=Math.max(1,Math.min(slides.length,+e.target.value||1));goPDF(p)});
 let drag=false;byId('resizer').addEventListener('pointerdown',e=>{drag=true;byId('resizer').setPointerCapture(e.pointerId)});byId('resizer').addEventListener('pointermove',e=>{if(!drag)return;let f=byId('frame').getBoundingClientRect();let x=(e.clientX-f.left)/f.width*100;document.documentElement.style.setProperty('--left',Math.max(40,Math.min(79,x))+'%')});byId('resizer').addEventListener('pointerup',()=>drag=false);
-setupPDF();renderLesson();flash('右侧 PDF 自由翻阅，不会自动跳页');
+setupPDF();if(continuous){article.append(make('h1','',course.title));lessons.forEach((l,i)=>{const section=make('section','page-section');section.id='lesson-p'+l.page;article.append(section);renderLesson(i,section)});lessonTo(state.idx);let ticking=false;pagePane.addEventListener('scroll',()=>{if(ticking)return;ticking=true;requestAnimationFrame(()=>{const y=pagePane.getBoundingClientRect().top+50;let index=0;lessons.forEach((l,i)=>{if(byId('lesson-p'+l.page).getBoundingClientRect().top<=y)index=i});state.idx=index;updateNavigation();save();ticking=false})},{passive:true})}else renderLesson();flash('右侧 PDF 自由翻阅，不会自动跳页');
 })();
